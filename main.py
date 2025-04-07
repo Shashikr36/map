@@ -9,20 +9,27 @@ from geoalchemy2 import Geometry, WKTElement
 import httpx
 from redis.asyncio import Redis
 import json
-from dotenv import load_dotenv
+from config import get_settings
+from sqlalchemy.engine.url import make_url
 
-# Load environment variables from .env file (only for local/dev)
-load_dotenv()
 
 # Environment variables (DATABASE_URL should NOT contain hardcoded passwords in the code)
-DATABASE_URL = os.getenv('DATABASE_URL')
-REDIS_URL = os.getenv('REDIS_URL', 'redis://localhost:6379/0')
+DATABASE_URL = get_settings().DATABASE_URL
+REDIS_URL = get_settings().REDIS_URL
+CA_CERT_PATH = os.path.join(os.getcwd(), "ca.pem")  # Path to the CA certificate
 
-if not DATABASE_URL:
-    raise RuntimeError("DATABASE_URL environment variable not set.")
+raw_url = get_settings().DATABASE_URL
 
-# Database setup
-engine = create_engine(DATABASE_URL, echo=False)
+# Normalize Aiven or other "postgres://" URLs
+url = make_url(raw_url)
+if url.drivername == "postgres":
+    url = url.set(drivername="postgresql+psycopg2")
+
+engine = create_engine(
+    url,
+    connect_args={"sslmode": "require", "sslrootcert": CA_CERT_PATH},
+    echo=False
+)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
